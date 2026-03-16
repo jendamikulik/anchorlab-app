@@ -322,18 +322,3 @@ The loop contracts to the anchor, and the fixed-point readout is a nonzero Gauss
 
 if __name__ == "__main__":
     main()
-
-"""Spusť to takhle:
-
-bash streamlit run anchorlab_app.py
-
-A úplně nejtvrdší point tohohle Pythonu je tenhle:
-
-affinní loop je explicitně
-a
-takže Lipschitz konstanta je prostě
-
-
-a fixpoint readout je gaussovka, tedy nenulový profil. To je přesně to, co jsme chtěli: **theorem-frame + numerická mašina**. 
-
-Jestli chceš, udělám teď ještě druhou verzi: **čistý desktop Python bez Streamlitu**, jen `matplotlib` + export PNG reportu.ႈ"""
