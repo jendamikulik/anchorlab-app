@@ -501,6 +501,230 @@ def make_substitution_plot(x, lhs, rhs):
     return fig
 
 
+
+
+def integral2d(f: np.ndarray, dx: float) -> float:
+    return float(np.sum(np.asarray(f, dtype=float)) * dx * dx)
+
+
+def bressan_eta_r(zx: np.ndarray, zy: np.ndarray, sigma: float, r: float) -> np.ndarray:
+    r2 = zx**2 + zy**2
+    sr = sigma * r
+    return np.exp(-0.5 * r2 / sr**2) / (2.0 * np.pi * sr**2)
+
+
+def bressan_grad_eta_r(zx: np.ndarray, zy: np.ndarray, sigma: float, r: float) -> tuple[np.ndarray, np.ndarray]:
+    er = bressan_eta_r(zx, zy, sigma, r)
+    sr2 = (sigma * r) ** 2
+    return -(zx / sr2) * er, -(zy / sr2) * er
+
+
+def build_bressan_kernels(x: np.ndarray, sigma: float, eps: float, R: float, n_r: int = 60) -> dict[str, np.ndarray]:
+    X, Y = np.meshgrid(x, x, indexing="xy")
+    rs = np.geomspace(eps, R, n_r)
+    logs = np.log(rs)
+
+    phi_stack = []
+    gx_stack = []
+    gy_stack = []
+    for r in rs:
+        phi_stack.append(bressan_eta_r(X, Y, sigma, r))
+        ex, ey = bressan_grad_eta_r(X, Y, sigma, r)
+        gx_stack.append(ex)
+        gy_stack.append(ey)
+
+    phi = np.trapezoid(np.stack(phi_stack, axis=0), logs, axis=0)
+    gx = np.trapezoid(np.stack(gx_stack, axis=0), logs, axis=0)
+    gy = np.trapezoid(np.stack(gy_stack, axis=0), logs, axis=0)
+
+    K11 = X * gx
+    K12 = X * gy
+    K21 = Y * gx
+    K22 = Y * gy
+    Z = X * gx + Y * gy
+
+    return {
+        "X": X,
+        "Y": Y,
+        "Phi": phi,
+        "gradx": gx,
+        "grady": gy,
+        "Z": Z,
+        "K11": K11,
+        "K12": K12,
+        "K21": K21,
+        "K22": K22,
+        "K11o": K11 - 0.5 * Z,
+        "K12o": K12,
+        "K21o": K21,
+        "K22o": K22 - 0.5 * Z,
+    }
+
+
+def fft_conv_same(kernel: np.ndarray, field: np.ndarray) -> np.ndarray:
+    fk = np.fft.fft2(np.fft.ifftshift(kernel))
+    ff = np.fft.fft2(field)
+    return np.fft.ifft2(fk * ff).real
+
+
+def bressan_gaussian_bump(X: np.ndarray, Y: np.ndarray, cx: float, cy: float, sigma: float) -> np.ndarray:
+    r2 = (X - cx) ** 2 + (Y - cy) ** 2
+    return np.exp(-0.5 * r2 / sigma**2)
+
+
+def bressan_transport_linear(
+    X: np.ndarray,
+    Y: np.ndarray,
+    t: float,
+    B: np.ndarray,
+    cx0: float,
+    cy0: float,
+    sigma: float,
+) -> np.ndarray:
+    evals, evecs = np.linalg.eig(B)
+    evecs_inv = np.linalg.inv(evecs)
+    exp_minus_tB = (evecs @ np.diag(np.exp(-t * evals)) @ evecs_inv).real
+    X0 = exp_minus_tB[0, 0] * X + exp_minus_tB[0, 1] * Y
+    Y0 = exp_minus_tB[1, 0] * X + exp_minus_tB[1, 1] * Y
+    return bressan_gaussian_bump(X0, Y0, cx0, cy0, sigma)
+
+
+def bressan_dynamic_channels(kernels: dict[str, np.ndarray], rho: np.ndarray, B: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    K11rho = fft_conv_same(kernels["K11"], rho)
+    K12rho = fft_conv_same(kernels["K12"], rho)
+    K21rho = fft_conv_same(kernels["K21"], rho)
+    K22rho = fft_conv_same(kernels["K22"], rho)
+
+    K11orho = fft_conv_same(kernels["K11o"], rho)
+    K12orho = fft_conv_same(kernels["K12o"], rho)
+    K21orho = fft_conv_same(kernels["K21o"], rho)
+    K22orho = fft_conv_same(kernels["K22o"], rho)
+
+    Zrho = fft_conv_same(kernels["Z"], rho)
+
+    H_full = -(
+        B[0, 0] * K11rho + B[0, 1] * K12rho + B[1, 0] * K21rho + B[1, 1] * K22rho
+    )
+    H_tr = -(
+        B[0, 0] * K11orho + B[0, 1] * K12orho + B[1, 0] * K21orho + B[1, 1] * K22orho
+    )
+    H_ct = -(np.trace(B) / 2.0) * Zrho
+    return H_full, H_tr, H_ct
+
+
+def bressan_fields() -> dict[str, np.ndarray]:
+    return {
+        "incompressible_hyperbolic": np.array([[1.0, 0.0], [0.0, -1.0]], dtype=float),
+        "incompressible_rotation": np.array([[0.0, -1.0], [1.0, 0.0]], dtype=float),
+        "compressible_identity": np.array([[1.0, 0.0], [0.0, 1.0]], dtype=float),
+        "weakly_compressible_diag": np.array([[0.6, 0.0], [0.0, -0.2]], dtype=float),
+    }
+
+def l2_norm(f: np.ndarray, dx: float) -> float:
+    return float(np.sqrt(np.sum(np.abs(f) ** 2) * dx * dx))
+
+@st.cache_data(show_spinner=False)
+def simulate_bressan_box(
+    N: int,
+    box_half_size: float,
+    sigma_kernel: float,
+    eps: float,
+    R: float,
+    nr: int,
+    sigma_rho: float,
+    rho_cx: float,
+    rho_cy: float,
+    T: float,
+    n_time: int,
+):
+    x = np.linspace(-box_half_size, box_half_size, N)
+    dx = float(x[1] - x[0])
+    X, Y = np.meshgrid(x, x, indexing="xy")
+    kernels = build_bressan_kernels(x, sigma_kernel, eps, R, nr)
+
+    traceK = kernels["K11"] + kernels["K22"]
+    traceKo = kernels["K11o"] + kernels["K22o"]
+    intZ = integral2d(kernels["Z"], dx)
+    log_target = -2.0 * np.log(R / eps)
+    structural = {
+        "max_abs_traceK_minus_Z": float(np.max(np.abs(traceK - kernels["Z"]))),
+        "max_abs_traceKo": float(np.max(np.abs(traceKo))),
+        "int_Z": float(intZ),
+        "minus_2log_R_over_eps": float(log_target),
+        "abs_intZ_minus_target": float(abs(intZ - log_target)),
+    }
+
+    t_grid = np.linspace(0.0, T, n_time)
+    curves = {}
+    snapshots = {}
+    flow_rows = []
+    snapshot_t = float(t_grid[len(t_grid) // 2])
+
+    for name, B in bressan_fields().items():
+        norms_full = []
+        norms_tr = []
+        norms_ct = []
+        ints_full = []
+        ints_ct = []
+        recon_errors = []
+        snap = None
+        for t in t_grid:
+            rho = bressan_transport_linear(X, Y, float(t), B, rho_cx, rho_cy, sigma_rho)
+            H_full, H_tr, H_ct = bressan_dynamic_channels(kernels, rho, B)
+            norms_full.append(l2_norm(H_full, dx))
+            norms_tr.append(l2_norm(H_tr, dx))
+            norms_ct.append(l2_norm(H_ct, dx))
+            ints_full.append(integral2d(H_full, dx))
+            ints_ct.append(integral2d(H_ct, dx))
+            recon_errors.append(float(np.max(np.abs(H_full - (H_tr + H_ct)))))
+            if abs(float(t) - snapshot_t) < 1e-12:
+                snap = {
+                    "rho": rho,
+                    "H_full": H_full,
+                    "H_tr": H_tr,
+                    "H_ct": H_ct,
+                }
+        curves[name] = {
+            "norms_full": np.asarray(norms_full),
+            "norms_tr": np.asarray(norms_tr),
+            "norms_ct": np.asarray(norms_ct),
+            "ints_full": np.asarray(ints_full),
+            "ints_ct": np.asarray(ints_ct),
+        }
+        snapshots[name] = snap
+        flow_rows.append({
+            "flow": name,
+            "trace(B)": float(np.trace(B)),
+            "max |H_full-(H_tr+H_ct)|": float(np.max(recon_errors)),
+            "max ||H_contact||_2": float(np.max(norms_ct)),
+            "max |∫H_full|": float(np.max(np.abs(ints_full))),
+            "max |∫H_contact|": float(np.max(np.abs(ints_ct))),
+        })
+
+    return x, structural, np.asarray(t_grid), curves, snapshots, pd.DataFrame(flow_rows)
+
+
+def make_bressan_contact_norm_plot(t_grid: np.ndarray, curves: dict[str, dict[str, np.ndarray]]):
+    fig, ax = plt.subplots(figsize=(8.6, 4.5), constrained_layout=True)
+    for name, payload in curves.items():
+        ax.plot(t_grid, payload["norms_ct"], linewidth=1.9, label=name)
+    style_axes(ax, "Dynamic contact-sector norm under linear flows", "time", r"$\|H_{\mathrm{contact}}(t)\|_2$")
+    ax.legend(frameon=False, fontsize=8, loc="best")
+    return fig
+
+
+def make_bressan_snapshot_grid(x: np.ndarray, snapshot: dict[str, np.ndarray], flow_name: str, t_mid: float):
+    fig, axs = plt.subplots(1, 4, figsize=(15.0, 3.9), constrained_layout=True)
+    titles = [f"{flow_name}\nrho(t={t_mid:.2f})", "H_full", "H_traceless", "H_contact"]
+    keys = ["rho", "H_full", "H_tr", "H_ct"]
+    extent = [float(x.min()), float(x.max()), float(x.min()), float(x.max())]
+    for ax, key, title in zip(axs, keys, titles):
+        im = ax.imshow(snapshot[key], origin="lower", extent=extent)
+        ax.set_title(title)
+        ax.set_xlabel("x")
+        ax.set_ylabel("y")
+        plt.colorbar(im, ax=ax, fraction=0.046)
+    return fig
 def main() -> None:
     inject_css()
 
@@ -510,11 +734,11 @@ def main() -> None:
             <h1>AnchorLab v5 — Proof Lab</h1>
             <div class="subhero">Less dashboard. More theorem wall. One place where anchoring, Fourier sectors, bridge lock, Swiss knife, and Vindaloo all live in the same proof-lab artifact.</div>
             <div class="formula-strip">
-                \[
+                \\[
                 (D_x,M_x)\to (A,A^\dagger)\to h_n\to \mathcal F=e^{-i\pi N/2}\to P_1,
                 \qquad
                 D_x\circ U_u=M_{u'}\circ U_u\circ D_u.
-                \]
+                \\]
             </div>
         </div>
         """,
@@ -604,6 +828,7 @@ def main() -> None:
         "EPOS",
         "Vindaloo",
         "Diagnostics",
+        "Bressan sim",
     ])
 
     with theorem_tabs[0]:
@@ -808,6 +1033,48 @@ def main() -> None:
         st.subheader("Iteration table")
         st.dataframe(iter_df, use_container_width=True, hide_index=True)
 
+
+
+    with theorem_tabs[8]:
+        st.markdown('<div class="caption-card">Full Bressan structural sim wired into the lab: exact trace/contact split, dynamic transport under linear flows, and time-resolved contact-sector diagnostics.</div>', unsafe_allow_html=True)
+        c_left, c_right = st.columns([1, 1.15])
+        with c_left:
+            bN = st.slider('Grid N', 81, 241, 161, 20)
+            bL = st.slider('Half-box size', 6.0, 16.0, 10.0, 0.5)
+            b_sigma_kernel = st.slider('Kernel base σ', 0.08, 0.50, 0.22, 0.01)
+            beps = st.slider('ε', 0.04, 0.40, 0.12, 0.01)
+            bR = st.slider('R', 0.60, 4.00, 2.00, 0.05)
+            bnr = st.slider('r quadrature points', 20, 100, 60, 5)
+            b_sigma_rho = st.slider('ρ bump σ', 0.20, 1.80, 0.90, 0.05)
+            brho_cx = st.slider('ρ center x', -3.0, 3.0, 1.5, 0.1)
+            brho_cy = st.slider('ρ center y', -3.0, 3.0, -1.0, 0.1)
+            bT = st.slider('Final time T', 0.2, 2.5, 1.2, 0.05)
+            bntime = st.slider('Time slices', 5, 31, 17, 1)
+            theorem_card(
+                'bressan sim',
+                'Trace/contact dies under incompressibility and survives only in the compressible channel',
+                'This is the full dynamic structural simulation package: build the multiscale kernel, split K into traceless plus scalar contact, evolve a transported scalar, and watch the contact-sector norm live or die depending on div b.',
+            )
+            st.latex(r'K_{jk}=K^{\circ}_{jk}+\frac{\delta_{jk}}{2}Z,\qquad \operatorname{tr}K=Z,\qquad \operatorname{tr}K^{\circ}=0')
+            st.latex(r'H_{\mathrm{full}}=H_{\mathrm{traceless}}+H_{\mathrm{contact}},\qquad H_{\mathrm{contact}}=-\frac{\operatorname{tr}(B)}{2}(Z*\rho)')
+        with c_right:
+            with st.spinner('Running full Bressan structural sim...'):
+                bx, bstruct, bt, bcurves, bsnapshots, bflow_df = simulate_bressan_box(
+                    bN, bL, b_sigma_kernel, beps, bR, bnr, b_sigma_rho, brho_cx, brho_cy, bT, bntime
+                )
+            m1, m2, m3 = st.columns(3)
+            with m1:
+                metric_card('max |trace(K)-Z|', f"{bstruct['max_abs_traceK_minus_Z']:.2e}", 'structural exactness')
+            with m2:
+                metric_card('max |trace(K°)|', f"{bstruct['max_abs_traceKo']:.2e}", 'traceless check')
+            with m3:
+                metric_card('|∫Z + 2log(R/ε)|', f"{bstruct['abs_intZ_minus_target']:.2e}", 'log-mass law error')
+            st.pyplot(make_bressan_contact_norm_plot(bt, bcurves), clear_figure=True)
+        st.subheader('Dynamic flow report')
+        st.dataframe(bflow_df, use_container_width=True, hide_index=True)
+        flow_name = st.selectbox('Snapshot flow', list(bcurves.keys()), index=0)
+        st.pyplot(make_bressan_snapshot_grid(bx, bsnapshots[flow_name], flow_name, float(bt[len(bt)//2])), clear_figure=True)
+        st.markdown('<div class="caption-card"><strong>Structural verdict.</strong> The simulator attacks the whole battlefield but measures honestly: scalar logarithmic mass lives in the contact channel, incompressible flows kill that channel, and the traceless core is what remains for the actual lower-bound hunt.</div>', unsafe_allow_html=True)
     verdict = (
         "The hammer smooths. The barycenter returns. The loop contracts. Collapse is vetoed. "
         "Fourier sectors are resolved. Bridge lock, Swiss knife, and Vindaloo are wired in."
