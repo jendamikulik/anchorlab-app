@@ -1,12 +1,13 @@
 import math
 from dataclasses import dataclass
+from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import streamlit as st
 
-st.set_page_config(page_title="AnchorLab v5 — Proof Lab", layout="wide")
+st.set_page_config(page_title="AnchorLab v7 — Proof Lab", layout="wide")
 
 
 @dataclass
@@ -620,8 +621,6 @@ def bressan_fields() -> dict[str, np.ndarray]:
         "weakly_compressible_diag": np.array([[0.6, 0.0], [0.0, -0.2]], dtype=float),
     }
 
-def l2_norm(f: np.ndarray, dx: float) -> float:
-    return float(np.sqrt(np.sum(np.abs(f) ** 2) * dx * dx))
 
 @st.cache_data(show_spinner=False)
 def simulate_bressan_box(
@@ -725,20 +724,62 @@ def make_bressan_snapshot_grid(x: np.ndarray, snapshot: dict[str, np.ndarray], f
         ax.set_ylabel("y")
         plt.colorbar(im, ax=ax, fraction=0.046)
     return fig
+
+
+
+def cumulative_trapezoid(y: np.ndarray, x: np.ndarray) -> np.ndarray:
+    y = np.asarray(y, dtype=float)
+    x = np.asarray(x, dtype=float)
+    out = np.zeros_like(y)
+    if len(y) < 2:
+        return out
+    dx = np.diff(x)
+    out[1:] = np.cumsum(0.5 * (y[:-1] + y[1:]) * dx)
+    return out
+
+
+def make_phase_transition_plot(A: float, c: float, t_star: float = 1.0, n: int = 700):
+    eps = 1e-3
+    t = np.linspace(0.0, t_star - eps, n)
+    p_values = [0.5, 1.0, 1.5]
+    labels = {0.5: 'subcritical p<1', 1.0: 'critical p=1', 1.5: 'supercritical p>1'}
+    fig, axes = plt.subplots(1, 2, figsize=(10.6, 4.4), constrained_layout=True)
+    for p in p_values:
+        sigma = A / np.maximum((t_star - t) ** p, 1e-12)
+        integ = cumulative_trapezoid(sigma, t)
+        delta = np.exp(-c * integ)
+        release = c * sigma * delta
+        axes[0].plot(t, delta, linewidth=2.0, label=labels[p])
+        axes[1].plot(t, release, linewidth=2.0, label=labels[p])
+    style_axes(axes[0], r'Phase closure $\delta(t)=\delta_0 e^{-c\int \sigma}$', 't', r'$\delta(t)$')
+    style_axes(axes[1], r'Release law $c\sigma(t)\delta(t)$', 't', 'release scale')
+    axes[0].legend(frameon=False, fontsize=8, loc='best')
+    axes[1].legend(frameon=False, fontsize=8, loc='best')
+    return fig
+
+
+def image_if_exists(path_str: str, caption: str, width: int | None = None) -> None:
+    path = Path(path_str)
+    if path.exists():
+        st.image(str(path), caption=caption, use_container_width=True, width=width)
+
+def l2_norm(f: np.ndarray, dx: float) -> float:
+    return float(np.sqrt(np.sum(np.abs(f) ** 2) * dx * dx))
+
 def main() -> None:
     inject_css()
 
     st.markdown(
         """
         <div class="hero">
-            <h1>AnchorLab v5 — Proof Lab</h1>
-            <div class="subhero">Less dashboard. More theorem wall. One place where anchoring, Fourier sectors, bridge lock, Swiss knife, and Vindaloo all live in the same proof-lab artifact.</div>
+            <h1>AnchorLab v7 — Proof Lab</h1>
+            <div class="subhero">Less dashboard. More theorem wall. One place where anchoring, Fourier sectors, bridge lock, Swiss knife, Vindaloo covariance, phase transition, and full Bressan sim all live in the same proof-lab artifact.</div>
             <div class="formula-strip">
-                \\[
+                \[
                 (D_x,M_x)\to (A,A^\dagger)\to h_n\to \mathcal F=e^{-i\pi N/2}\to P_1,
                 \qquad
-                D_x\circ U_u=M_{u'}\circ U_u\circ D_u.
-                \\]
+                D_x\circ U_u=M_{u'}\circ U_u\circ D_u,\qquad \dot M \sim c\,u'(s)\,\widetilde\delta(s)\,\widetilde\sigma(s).
+                \]
             </div>
         </div>
         """,
@@ -827,8 +868,10 @@ def main() -> None:
         "Swiss knife",
         "EPOS",
         "Vindaloo",
+        "Final theorem",
         "Diagnostics",
         "Bressan sim",
+        "Gallery",
     ])
 
     with theorem_tabs[0]:
@@ -883,6 +926,12 @@ def main() -> None:
                     "With M(δ)=-sin δ and δ̇=-cδσ, the readout obeys Ṁ=cδσ cosδ. Near zero, the macroscopic release has the same sign as curvature.",
                 )
                 st.latex(r"\dot M=c\,\delta\,\sigma\cos\delta = c\,\delta\,\sigma+O(\delta^3\sigma)")
+                theorem_card(
+                    "final theorem",
+                    "Vindaloo becomes portable and phase-transition aware",
+                    "Swiss knife transports the punchline law under reparameterization, and singular mirror closure is controlled by the divergence of the accumulated curvature integral.",
+                )
+                st.latex(r"\frac{d}{ds}M(\widetilde\delta(s)) = c\,u'(s)\,\widetilde\delta(s)\,\widetilde\sigma(s)\cos(\widetilde\delta(s))")
 
     with theorem_tabs[1]:
         st.markdown('<div class="caption-card">Raw signal, hammer, closed loop, and readout. This is the lab side: where the proof spine touches data or toy input.</div>', unsafe_allow_html=True)
@@ -914,7 +963,7 @@ def main() -> None:
             n_max = st.slider('Max Hermite mode', 4, 40, 16, 1)
             theorem_card(
                 'hermite spine',
-                'The rigorous core is $(D_x,M_x)\to (A,A^\dagger)\to h_n\to \mathcal F=e^{-i\pi N/2}\to P_1$',
+                r'The rigorous core is $(D_x,M_x)\to (A,A^\dagger)\to h_n\to \mathcal F=e^{-i\pi N/2}\to P_1$',
                 'Gaussian is the vacuum, Hermite modes are the excitations, and Fourier only rotates phase. The self-dual core is exactly the mod-4 residue.',
             )
             st.latex(r'(D_x,M_x)\to(A,A^\dagger)\to h_n\to \mathcal F=e^{-i\pi N/2}\to P_1')
@@ -1003,6 +1052,31 @@ def main() -> None:
             st.pyplot(make_vindaloo_plot(delta_max, c_v, sigma_v), clear_figure=True)
 
     with theorem_tabs[7]:
+        st.markdown('<div class="caption-card">Final stitched theorem: Vindaloo readout + Swiss-knife covariance + singular mirror-closure classification. This is the portable cihla.</div>', unsafe_allow_html=True)
+        ft_left, ft_right = st.columns([1.05, 0.95])
+        with ft_left:
+            A_phase = st.slider('A (curvature amplitude)', 0.1, 3.0, 1.0, 0.05)
+            c_phase = st.slider('c (closure coupling)', 0.1, 3.0, 1.0, 0.05)
+            theorem_card(
+                'final theorem',
+                'Vindaloo with Swiss-knife covariance',
+                "With M(δ)=-sinδ and the substitution rule D_s(U_uF)=M_{u'}U_u(D_tF), the punchline mechanism survives reparameterization and keeps the same sign structure when u'(s)>0.",
+            )
+            st.latex(r"M(\delta)=-\sin\delta")
+            st.latex(r"\frac{d}{ds}M(\widetilde\delta(s)) = c\,u'(s)\,\widetilde\delta(s)\,\widetilde\sigma(s)\cos(\widetilde\delta(s))")
+            theorem_card(
+                'phase transition',
+                'Singular mirror closure occurs iff the accumulated curvature diverges',
+                r"The real threshold is not merely $\sigma\to\infty$. The closure happens exactly when $\int \sigma$ diverges, with subcritical, critical, and supercritical blow-up classes.",
+            )
+            st.latex(r"\delta(t)=\delta(t_0)\exp\!\left(-c\int_{t_0}^t \sigma(s)\,ds\right)")
+            st.latex(r"\int_{t_0}^{t_*}\sigma(s)\,ds<\infty \Rightarrow \delta(t)\to \delta_*>0,\qquad \int_{t_0}^{t_*}\sigma(s)\,ds=+\infty \Rightarrow \delta(t)\to 0")
+            st.latex(r"\sigma(t)\sim \frac{A}{(t_*-t)^p}:\quad p<1 \text{ no transition},\ p=1 \text{ critical},\ p>1 \text{ super-exponential closure}")
+        with ft_right:
+            st.pyplot(make_phase_transition_plot(A_phase, c_phase), clear_figure=True)
+            image_if_exists('/mnt/data/KID_VINDALOO.jpg', 'Vindaloo theorem poster — current sheet')
+
+    with theorem_tabs[8]:
         diag = pd.DataFrame(
             {
                 "quantity": [
@@ -1035,7 +1109,7 @@ def main() -> None:
 
 
 
-    with theorem_tabs[8]:
+    with theorem_tabs[9]:
         st.markdown('<div class="caption-card">Full Bressan structural sim wired into the lab: exact trace/contact split, dynamic transport under linear flows, and time-resolved contact-sector diagnostics.</div>', unsafe_allow_html=True)
         c_left, c_right = st.columns([1, 1.15])
         with c_left:
@@ -1075,9 +1149,19 @@ def main() -> None:
         flow_name = st.selectbox('Snapshot flow', list(bcurves.keys()), index=0)
         st.pyplot(make_bressan_snapshot_grid(bx, bsnapshots[flow_name], flow_name, float(bt[len(bt)//2])), clear_figure=True)
         st.markdown('<div class="caption-card"><strong>Structural verdict.</strong> The simulator attacks the whole battlefield but measures honestly: scalar logarithmic mass lives in the contact channel, incompressible flows kill that channel, and the traceless core is what remains for the actual lower-bound hunt.</div>', unsafe_allow_html=True)
+    with theorem_tabs[10]:
+        st.markdown('<div class="caption-card">Poster and meme assets wired into the lab so the theorem stack has a visual home as well as a proof spine.</div>', unsafe_allow_html=True)
+        g1, g2 = st.columns(2)
+        with g1:
+            image_if_exists('/mnt/data/88c6cb8f-c611-45d5-972e-2ef27b802b12.png', 'Sigma background / meme canvas')
+            image_if_exists('/mnt/data/KID_VINDALOO.jpg', 'Vindaloo sheet asset')
+        with g2:
+            image_if_exists('/mnt/data/b48c47be-a284-4d84-a60a-55ac7312b3ac.png', 'Uniform quartic window bound sheet')
+            image_if_exists('/mnt/data/MASAKRRRRRRRRRRRRR.png', 'Maxwell → light cone → Lorentz sheet')
+
     verdict = (
         "The hammer smooths. The barycenter returns. The loop contracts. Collapse is vetoed. "
-        "Fourier sectors are resolved. Bridge lock, Swiss knife, and Vindaloo are wired in."
+        "Fourier sectors are resolved. Bridge lock, Swiss knife, Vindaloo covariance, phase transition, and Bressan sim are wired in."
         if q_exact < 1.0 and np.max(r_star) > 0 and reconstruction_error < 1e-10
         else "This parameter regime certifies only part of the pipeline. Check contraction, readout, or Fourier-sector diagnostics."
     )
