@@ -935,6 +935,8 @@ def main() -> None:
         "Diagnostics",
         "Bressan sim",
         "Gallery",
+        "MPL / Catalan",
+        "CORE / Schr",
     ])
 
     with theorem_tabs[0]:
@@ -1287,6 +1289,98 @@ def main() -> None:
         with g2:
             image_if_exists('/mnt/data/b48c47be-a284-4d84-a60a-55ac7312b3ac.png', 'Uniform quartic window bound sheet')
             image_if_exists('/mnt/data/MASAKRRRRRRRRRRRRR.png', 'Maxwell → light cone → Lorentz sheet')
+
+
+    with theorem_tabs[13]:
+        st.markdown('<div class="caption-card">Everything Mellin-Parity Ladder in one room: master theorem, utility form, parity split, complexity scaling, and the Catalan-facing kernel channel.</div>', unsafe_allow_html=True)
+        left, right = st.columns([1.05, 1.0])
+        with left:
+            theorem_card(
+                'mellin–parity ladder',
+                'One nD log-integral collapses to one weighted Mellin series',
+                'For integrals of the form I_n[K]=∫_[0,1]^n K(x₁) log(1+x₁⋯x_n) dx, expand log(1+u), separate variables, and the whole tower becomes a single moment bank μ_m[K] dressed by the dimensional weight 1/(m(m+1)^{n-1}).',
+            )
+            st.latex(r"I_n[K]=\sum_{m=1}^{\infty}\frac{(-1)^{m+1}}{m(m+1)^{n-1}}\,\mu_m[K],\qquad \mu_m[K]=\int_0^1 x^m K(x)\,dx")
+            theorem_card(
+                'utility form',
+                'MPL is a reusable transform, not a one-off trick',
+                'Define MPL_n[K] as the weighted Mellin moment series. Then every admissible master integral is just MPL_n[K], and parity splits it canonically into odd channel minus even channel.',
+            )
+            st.latex(r"\operatorname{MPL}_n[K]:=\sum_{m=1}^{\infty}\frac{(-1)^{m+1}}{m(m+1)^{n-1}}\,\mu_m[K]")
+            st.latex(r"\operatorname{MPL}_n[K]=\operatorname{MPL}^{\mathrm{odd}}_n[K]-\operatorname{MPL}^{\mathrm{even}}_n[K]")
+            theorem_card(
+                'complexity',
+                'Dimension suppresses modes instead of exploding cost',
+                'If the moments stay bounded, truncation error behaves like M^{-n}, so required mode count scales like ε^{-1/n}. High dimension becomes a spectral low-pass filter instead of a curse.',
+            )
+            st.latex(r"|I_n-S_M|\lesssim \sum_{m>M}\frac{|\mu_m[K]|}{m(m+1)^{n-1}}\sim M^{-n},\qquad T(arepsilon,n)\sim arepsilon^{-1/n}")
+        with right:
+            theorem_card(
+                'catalan core',
+                'Odd residue channel is where Catalan-style structure lives',
+                'For the kernel K(x)=1/(1+x^2), the Mellin moments A_m=∫_0^1 x^m/(1+x^2) dx generate the full ladder, and the odd-even split isolates the residue channel that naturally talks to Catalan/Dirichlet-beta structure.',
+            )
+            st.latex(r"A_m=\int_0^1 \frac{x^m}{1+x^2}\,dx,\qquad I_n=\sum_{m=1}^{\infty}\frac{(-1)^{m+1}}{m(m+1)^{n-1}}A_m")
+            st.latex(r"I_n=\sum_{k=0}^{\infty}\frac{A_{2k+1}}{(2k+1)(2k+2)^{n-1}}-\sum_{k=1}^{\infty}\frac{A_{2k}}{2k(2k+1)^{n-1}}")
+            n_demo = st.slider('MPL dimension n', 2, 30, 12, 1, key='mpl_dim_full')
+            m_demo = st.slider('MPL cutoff M', 8, 200, 80, 2, key='mpl_modes_full')
+            ms, A_vals, coeffs, even_mask, odd_mask = epos_coefficients(n_demo, m_demo)
+            approx_val = float(np.sum(coeffs))
+            odd_val = float(np.sum(coeffs[odd_mask]))
+            even_val = float(-np.sum(coeffs[even_mask]))
+            m1, m2, m3 = st.columns(3)
+            with m1:
+                metric_card('MPL partial sum', f'{approx_val:.10f}', f'n={n_demo}, M={m_demo}')
+            with m2:
+                metric_card('odd channel', f'{odd_val:.10f}', 'Catalan-facing residue')
+            with m3:
+                metric_card('even channel', f'{even_val:.10f}', 'base subtraction')
+            st.pyplot(make_epos_plot(n_demo, m_demo), clear_figure=True)
+
+    with theorem_tabs[14]:
+        st.markdown('<div class="caption-card">Swiss knife, complex CORE, Schrödinger transport, and Hamiltonian commutators fused into one operator wall. This is the full change-of-variables engine.</div>', unsafe_allow_html=True)
+        left, right = st.columns([1.0, 1.05])
+        with left:
+            theorem_card(
+                'core utility',
+                'The whole substitution machine is one commutation rule',
+                'Real CORE: U_u transports composition and D_x pays the derivative tax. Every antiderivative, direct differentiation, and multiplier transport is fallout from one identity.',
+            )
+            st.latex(r"(U_uF)(x):=F(u(x)),\qquad D_x\circ U_u=M_{u'}\circ U_u\circ D_u")
+            theorem_card(
+                'complex core',
+                'In C you pay by scale and phase',
+                "Holomorphic transport upgrades the derivative tax into a complex Jacobian. The multiplier u'(z)=|u'(z)|e^{i\arg u'(z)} carries both amplitude and phase rotation.",
+            )
+            st.latex(r"D_z\circ U_u=M_{u'(z)}\circ U_u\circ D_w=M_{|u'(z)|}\circ M_{e^{i\arg u'(z)}}\circ U_u\circ D_w")
+            theorem_card(
+                'usage protocol',
+                'Find the inner map. Pull the outer layer through it. Pay by the derivative.',
+                "CORE is a reusable utility for expressions of the form f(u(x))u'(x) or f(u(z))u'(z): identify the inner block u, identify the outer factor f, verify the derivative tax, then integrate or differentiate through the operator rule.",
+            )
+            st.latex(r"\int f(u(x))u'(x)\,dx=F(u(x))+C,\qquad \int_\gamma f(u(z))u'(z)\,dz=F(u(\gamma(b)))-F(u(\gamma(a)))")
+        with right:
+            theorem_card(
+                'schrödinger core',
+                'Change of variable transports the full Hamiltonian, not just the wavefunction argument',
+                "Applying CORE twice yields D_x^2∘U_u=M_{(u')^2}∘U_u∘D_w^2+M_{u''}∘U_u∘D_w. The kinetic term gains a metric factor and a geometric drift; the potential is pulled back.",
+            )
+            st.latex(r"H_x=-\frac{\hbar^2}{2m}D_x^2+M_V")
+            st.latex(r"D_x^2\circ U_u=M_{(u')^2}\circ U_u\circ D_w^2+M_{u''}\circ U_u\circ D_w")
+            st.latex(r"H_x\circ U_u=-\frac{\hbar^2}{2m}\bigl(M_{(u')^2}\circ U_u\circ D_w^2+M_{u''}\circ U_u\circ D_w\bigr)+M_{V\circ u}\circ U_u")
+            theorem_card(
+                'hamiltonian commutators',
+                'Potential noncommutativity is measured by derivatives of V',
+                "The derivative fails to commute with multiplication by V exactly by V'. The second-order obstruction is 2V'D_x+V''; this is where geometry enters the operator algebra.",
+            )
+            st.latex(r"[D_x,M_V]=M_{V'},\qquad [D_x^2,M_V]=2M_{V'}D_x+M_{V''},\qquad [D_x,H_x]=M_{V'}")
+            theorem_card(
+                'core2 bridge',
+                'Trace elimination + closure curvature + bridge inequality = decisive readout',
+                'The Bressan–Vindaloo–CORE2 stack first removes trace/contact artefacts, then uses the closure law δ̇=-cσδ, then bridges linear drift into explosive excess. Form is noise; invariant is verdict.',
+            )
+            st.latex(r"\delta(t)=\delta(t_0)\exp\!\left(-c\int_{t_0}^t \sigma(s)\,ds\right),\qquad \int_{t_0}^{t_*}\sigma(s)\,ds=+\infty\Rightarrow \delta(t)\to 0")
+            st.latex(r"E_{\mathrm{ex}}(f)=+\infty,\qquad V_{\mathrm{CORE2}}(X)=R_{\mathrm{CORE2}}(M(X))")
 
     verdict = (
         "The hammer smooths. The barycenter returns. The loop contracts. Collapse is vetoed. "
