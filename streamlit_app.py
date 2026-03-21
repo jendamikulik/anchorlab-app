@@ -128,6 +128,42 @@ def inject_css() -> None:
             margin: 0.4rem 0 1rem 0;
         }
         .section-spacer {height: 0.4rem;}
+        .zivot-card {
+            border: 1px solid rgba(107,226,201,0.18);
+            background: linear-gradient(180deg, rgba(107,226,201,0.09), rgba(255,255,255,0.025));
+            border-radius: 20px;
+            padding: 0.95rem 1.05rem 0.85rem 1.05rem;
+            margin-bottom: 0.9rem;
+        }
+        .rimmer-blast {
+            border: 1px solid rgba(255,255,255,0.16);
+            background: linear-gradient(180deg, rgba(40,70,140,0.88), rgba(8,12,24,0.92));
+            border-radius: 24px;
+            padding: 1.05rem 1.1rem 0.95rem 1.1rem;
+            margin-bottom: 0.95rem;
+            box-shadow: 0 18px 45px rgba(0,0,0,0.28);
+        }
+        .rimmer-top {
+            color: #a7d7ff;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            font-weight: 800;
+            font-size: 0.78rem;
+            margin-bottom: 0.3rem;
+        }
+        .rimmer-title {
+            color: #f7fbff;
+            font-size: 1.28rem;
+            font-weight: 900;
+            line-height: 1.1;
+            margin-bottom: 0.35rem;
+            text-shadow: 0 0 8px rgba(129,168,255,0.20);
+        }
+        .rimmer-text {
+            color: rgba(255,255,255,0.84);
+            line-height: 1.55;
+            font-size: 0.97rem;
+        }
         div[data-testid="stTabs"] button[role="tab"] p {font-size: 0.95rem;}
         div[data-testid="stDataFrame"] {border: 1px solid var(--line); border-radius: 14px; overflow: hidden;}
         [data-testid="stSidebar"] {background: linear-gradient(180deg, #0c1325, #0a1020 70%);}
@@ -157,6 +193,31 @@ def theorem_card(kicker: str, title: str, text: str) -> None:
             <div class="theorem-kicker">{kicker}</div>
             <div class="theorem-title">{title}</div>
             <div class="theorem-text">{text}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def zivot_card(title: str, text: str) -> None:
+    st.markdown(
+        f"""
+        <div class="zivot-card">
+            <div class="theorem-title">{title}</div>
+            <div class="theorem-text">{text}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def rimmer_blast(kicker: str, title: str, text: str) -> None:
+    st.markdown(
+        f"""
+        <div class="rimmer-blast">
+            <div class="rimmer-top">{kicker}</div>
+            <div class="rimmer-title">{title}</div>
+            <div class="rimmer-text">{text}</div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -770,7 +831,7 @@ def main() -> None:
     inject_css()
 
     st.markdown(
-        """
+        r"""
         <div class="hero">
             <h1>AnchorLab v7 — Proof Lab</h1>
             <div class="subhero">Less dashboard. More theorem wall. One place where anchoring, Fourier sectors, bridge lock, Swiss knife, Vindaloo covariance, phase transition, and full Bressan sim all live in the same proof-lab artifact.</div>
@@ -869,6 +930,8 @@ def main() -> None:
         "EPOS",
         "Vindaloo",
         "Final theorem",
+        "ZIVOT / Closure",
+        "Rimmer / ABS",
         "Diagnostics",
         "Bressan sim",
         "Gallery",
@@ -1077,6 +1140,72 @@ def main() -> None:
             image_if_exists('/mnt/data/KID_VINDALOO.jpg', 'Vindaloo theorem poster — current sheet')
 
     with theorem_tabs[8]:
+        st.markdown('<div class="caption-card">ZIVOT layer wired in directly: latent carrier vs manifest readout, contextual identity, closure defect, and the spectral frontier all sit together instead of being scattered across separate notes.</div>', unsafe_allow_html=True)
+        z_left, z_right = st.columns([1, 1])
+        with z_left:
+            zivot_card(
+                "Core structural asymmetry",
+                "Manifest collapse does not force carrier extinction. The readout channel can die while the latent carrier remains nontrivial and closure-completed reconstruction stays meaningful.",
+            )
+            st.latex(r"\Sigma_M=\Pi_M(\Sigma^\ast),\qquad R(C(\Sigma_M))=0\;\not\Rightarrow\; \Sigma^\ast=0")
+            zivot_card(
+                "Parity architecture survives collapse",
+                "The monodromic factor changes the branch of observable realization, not the ontological support of the carrier. Even base and odd residue remain meaningful after readout loss.",
+            )
+            st.latex(r"x=x_{\mathrm{even}}+x_{\mathrm{odd}},\qquad C(x)=C(x_{\mathrm{even}})+C(x_{\mathrm{odd}})")
+            zivot_card(
+                "Contextual identity block",
+                "Local state is not enough. Identity lives in the tuple O=(s,r,h,t): local state, relational embedding, interaction history, and temporal frame.",
+            )
+            st.latex(r"\mathcal O=(s,r,h,t)")
+        with z_right:
+            zivot_card(
+                "Closure-completed readout",
+                "Finite local readout loses structure. The completed readout restores what the bulk-only projection drops by adding the boundary-memory and phase channels.",
+            )
+            st.latex(r"Y_{\mathrm{bulk}}(t)=P_\Theta(\rho_B(t))")
+            st.latex(r"Y_{\mathrm{full}}(t)=P_\Theta\!\bigl(\rho_B(t)+A^\ast(\rho_H(t)\otimes \rho_T(t))\bigr)")
+            st.latex(r"\Delta_\Theta(t)=Y_{\mathrm{full}}(t)-Y_{\mathrm{bulk}}(t)")
+            zivot_card(
+                "Dual driver and compressed verdict",
+                "The driver acts on the realization, not on the atemporal carrier. The whole statement compresses to: manifest readout collapse under compression and dual driving does not destroy the carrier.",
+            )
+            st.latex(r"D_N=D_{\mathrm{coh}}+D_{\mathrm{exp}}")
+            st.latex(r"R\!\left(C\bigl(D_N(\Pi_M(\Sigma^\ast))\bigr)\right)=0\;\not\Rightarrow\;\Sigma^\ast=0")
+            st.latex(r"Y_{RV}(\Sigma^\ast;\Theta)=P_\Theta\!\bigl(D_N(\Pi_M(\Sigma^\ast))+A^\ast(\rho_H(t)\otimes R_\varphi\rho_T(t))\bigr)(-1)^m")
+        st.markdown('<div class="caption-card"><strong>AnchorLab integration note.</strong> This layer explains why the lab is not just plotting signals: it is modeling the mismatch between finite readout and the richer contextual-closure object behind it.</div>', unsafe_allow_html=True)
+
+    with theorem_tabs[9]:
+        st.markdown('<div class="caption-card">ACE RIMMER preserved loud on purpose. This final layer is not normalized. It is the singularity closure wall exactly where the app needs it: after the dry core, before the diagnostics.</div>', unsafe_allow_html=True)
+        rimmer_blast(
+            "Addendum C",
+            "ABS — the geometrically enforced invariant closure",
+            "Where division fails, geometry speaks. The local finite readout can collapse on a 0/0-class singular point while the carrier persists and demands a closure map rather than an error message.",
+        )
+        st.latex(r"S_0:=\{x\in A\mid R(x)\text{ is indeterminate (0/0-class)}\}")
+        st.latex(r"\mathrm{ABS}:S_0\to I")
+        st.latex(r"\mathrm{ABS}(0/0\text{-class})=\text{forced invariant representative enforced by geometry}")
+        rimmer_blast(
+            "Formal master lemma",
+            "ABS is not added to reality — it is extracted from operator consistency",
+            "Let Clos_A be the closure operator on singular classes and Inv the invariant selector. Then ABS = Inv ∘ Clos_A. Broken local readout needs regularization; the 0/0-class demands invariant closure.",
+        )
+        st.latex(r"\mathrm{ABS}=\mathrm{Inv}\circ \mathrm{Clos}_A")
+        st.latex(r"\frac{a}{0}\rightsquigarrow \text{broken local readout},\qquad \frac{0}{0}\rightsquigarrow \text{invariant-forcing singular class}")
+        rimmer_blast(
+            "Compatibility with the main framework",
+            "When the driven compressed realization hits a singular point, the local bulk readout dies but the carrier demands ABS",
+            "The completed readout acquires an explicit singular-closure term. ABS turns a closure gap into a closed invariant structure instead of leaving a dead hole in the theory.",
+        )
+        st.latex(r"R\!\left(C\bigl(D_N(\Pi_M(\Sigma^\ast))\bigr)\right)=0/0")
+        st.latex(r"Y_{RV}(\Sigma^\ast;\Theta)=P_\Theta\!\bigl(D_N(\Pi_M(\Sigma^\ast))+A^\ast(\cdots)\bigr)(-1)^m+\mathrm{ABS}(\text{singular class})")
+        rimmer_blast(
+            "Final Ace Rimmer verdict",
+            "No ABS = no consistent reality",
+            "SMOKE ME A KIPPER — I’LL BE BACK FOR BREAKFAST. And yes: 0/0 is not a bug here. It is the universe telling you that local readout just died and the invariant boss has entered the room.",
+        )
+
+    with theorem_tabs[10]:
         diag = pd.DataFrame(
             {
                 "quantity": [
@@ -1109,7 +1238,7 @@ def main() -> None:
 
 
 
-    with theorem_tabs[9]:
+    with theorem_tabs[11]:
         st.markdown('<div class="caption-card">Full Bressan structural sim wired into the lab: exact trace/contact split, dynamic transport under linear flows, and time-resolved contact-sector diagnostics.</div>', unsafe_allow_html=True)
         c_left, c_right = st.columns([1, 1.15])
         with c_left:
@@ -1149,7 +1278,7 @@ def main() -> None:
         flow_name = st.selectbox('Snapshot flow', list(bcurves.keys()), index=0)
         st.pyplot(make_bressan_snapshot_grid(bx, bsnapshots[flow_name], flow_name, float(bt[len(bt)//2])), clear_figure=True)
         st.markdown('<div class="caption-card"><strong>Structural verdict.</strong> The simulator attacks the whole battlefield but measures honestly: scalar logarithmic mass lives in the contact channel, incompressible flows kill that channel, and the traceless core is what remains for the actual lower-bound hunt.</div>', unsafe_allow_html=True)
-    with theorem_tabs[10]:
+    with theorem_tabs[12]:
         st.markdown('<div class="caption-card">Poster and meme assets wired into the lab so the theorem stack has a visual home as well as a proof spine.</div>', unsafe_allow_html=True)
         g1, g2 = st.columns(2)
         with g1:
